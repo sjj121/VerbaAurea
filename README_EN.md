@@ -160,6 +160,6 @@ Contributions to the VerbaAurea project are welcome! You can participate by:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date)](https://star-history.com/#AEPAX/VerbaAurea&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date)](https://www.star-history.com/#AEPAX/VerbaAurea&Date)
 
 This project is licensed under the [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) license.
