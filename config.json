@@ -15,5 +15,11 @@
     "sentence_end_score_bonus": 6,
     "length_score_factor": 100,
     "search_window": 5
+  },
+  "performance_settings": {
+    "parallel_processing": true,
+    "num_workers": 0,
+    "cache_size": 1024,
+    "batch_size": 50
   }
 }

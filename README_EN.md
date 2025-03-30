@@ -21,10 +21,18 @@ VerbaAurea is an intelligent document preprocessing tool dedicated to transformi
 - **Content Management** - Improves document organization in content management systems
 
 ```
-your_project_folder/ 
-├── split_word.py # Main script 
-├── config_manager.py # Configuration management module 
-├── config.json # Auto-generated configuration file 
+Project Structure:
+├── main.py                 # Main program entry point
+├── config_manager.py       # Configuration management
+├── document_processor.py   # Document processing core
+├── text_analysis.py        # Text analysis functions
+├── parallel_processor.py   # Parallel processing implementation
+├── utils.py                # Utility functions
+├── config.json             # Auto-generated configuration file
+├── requirements.txt        # Project dependencies
+├── README.md               # Chinese documentation
+├── README_EN.md            # English documentation
+├── LICENSE                 # Open-source license
 └── Documents or document folders...
 ```
 

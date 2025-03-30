@@ -26,10 +26,18 @@ VerbaAurea 是一个智能文档预处理工具，致力于将原始文档转化
   
 
 ```
-your_project_folder/
-├── split_word.py       # 主脚本
-├── config_manager.py   # 配置管理模块
+项目结构如下/
+├── main.py                 # 主程序入口
+├── config_manager.py       # 配置管理
+├── document_processor.py   # 文档处理核心
+├── text_analysis.py        # 文本分析功能
+├── parallel_processor.py   # 并行处理实现
+├── utils.py                # 工具函数
 ├── config.json   # 自动生成的配置文件
+├── requirements.txt   # 项目所需库
+├── README.md   # 中文文档
+├── README_EN.md   # 英文文档
+├── LICENSE   # 开源许可证
 └── 文档或文档所在文件夹...
 ```
 
