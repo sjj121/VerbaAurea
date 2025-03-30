@@ -1,6 +1,6 @@
 # 📚 VerbaAurea 🌟
 
-🇨🇳 [中文](./README.md) | 🇺🇸 [English](./README_EN.md)
+中文 [中文](./README.md) | 英文 [English](./README_EN.md)
 
 VerbaAurea 是一个智能文档预处理工具，致力于将原始文档转化为"黄金"般的知识，为知识库构建提供高质量的文本数据。它专注于文档智能分割，确保语义完整性，为知识库检索和大语言模型微调提供优质素材。
 
