@@ -1,0 +1,19 @@
+{
+  "document_settings": {
+    "max_length": 1000,
+    "min_length": 300,
+    "sentence_integrity_weight": 8.0
+  },
+  "processing_options": {
+    "debug_mode": false,
+    "output_folder": "双碳输出",
+    "skip_existing": true
+  },
+  "advanced_settings": {
+    "min_split_score": 7,
+    "heading_score_bonus": 10,
+    "sentence_end_score_bonus": 6,
+    "length_score_factor": 100,
+    "search_window": 5
+  }
+}

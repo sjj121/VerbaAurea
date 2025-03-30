@@ -6,6 +6,7 @@ from pathlib import Path
 import nltk
 from nltk.tokenize import sent_tokenize
 import jieba
+from config_manager import load_config, show_config, edit_config
 
 # 下载必要的nltk数据（第一次运行需要）
 try:
@@ -44,13 +45,13 @@ def is_sentence_boundary(text_before, text_after):
     return False
 
 
-def find_nearest_sentence_boundary(paragraphs_info, current_index, window=5):
+def find_nearest_sentence_boundary(paragraphs_info, current_index, search_window=5):
     """寻找距离当前位置最近的句子边界"""
     best_index = -1
     min_distance = float('inf')
 
     # 向前查找
-    for i in range(max(0, current_index - window), current_index + 1):
+    for i in range(max(0, current_index - search_window), current_index + 1):
         if i > 0 and is_sentence_boundary(paragraphs_info[i - 1]['text'], paragraphs_info[i]['text']):
             distance = current_index - i
             if 0 <= distance < min_distance:
@@ -58,7 +59,7 @@ def find_nearest_sentence_boundary(paragraphs_info, current_index, window=5):
                 best_index = i
 
     # 向后查找
-    for i in range(current_index + 1, min(len(paragraphs_info), current_index + window + 1)):
+    for i in range(current_index + 1, min(len(paragraphs_info), current_index + search_window + 1)):
         if i > 0 and is_sentence_boundary(paragraphs_info[i - 1]['text'], paragraphs_info[i]['text']):
             distance = i - current_index
             if distance < min_distance:
@@ -76,8 +77,7 @@ def get_paragraph_semantic_block(paragraphs_info, start_idx, end_idx):
     return block_text.strip()
 
 
-def insert_split_markers(input_file, output_file, max_length=1000, min_length=300,
-                         sentence_integrity_weight=8.0, debug_mode=False):
+def insert_split_markers(input_file, output_file, config):
     """
     在Word文档中根据算法自动嵌入<!--split-->标记
 
@@ -87,12 +87,28 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
     3. 长度控制
     4. 自然段落边界
     5. 句子完整性保证
-
-    参数:
-    - sentence_integrity_weight: 句子完整性的权重
-    - debug_mode: 是否输出调试信息
     """
+    # 从配置中提取参数
+    doc_settings = config["document_settings"]
+    proc_options = config["processing_options"]
+    adv_settings = config["advanced_settings"]
+
+    max_length = doc_settings["max_length"]
+    min_length = doc_settings["min_length"]
+    sentence_integrity_weight = doc_settings["sentence_integrity_weight"]
+    debug_mode = proc_options["debug_mode"]
+    search_window = adv_settings["search_window"]
+    min_split_score = adv_settings["min_split_score"]
+    heading_score_bonus = adv_settings["heading_score_bonus"]
+    sentence_end_score_bonus = adv_settings["sentence_end_score_bonus"]
+    length_score_factor = adv_settings["length_score_factor"]
+
     print(f"正在处理文档: {input_file}")
+
+    # 如果配置为跳过已存在文件，且输出文件已存在，则跳过处理
+    if proc_options["skip_existing"] and os.path.exists(output_file):
+        print(f"跳过已存在文件: {output_file}")
+        return True
 
     try:
         doc = Document(input_file)
@@ -209,13 +225,13 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
 
         # 1. 标题是最佳分隔点
         if para_info['is_heading']:
-            split_score += 10
+            split_score += heading_score_bonus
 
-        # 2. 句子完整性检查 (增加权重)
+        # 2. 句子完整性检查
         if para_info['ends_with_period']:
-            split_score += 6
+            split_score += sentence_end_score_bonus
 
-        # 3. 确保分割点在句子边界 (新增)
+        # 3. 确保分割点在句子边界
         if i > 0 and is_sentence_boundary(paragraphs_info[i - 1]['text'], para_info['text']):
             split_score += 8 * sentence_integrity_weight / 8.0  # 使用传入的权重调整
         else:
@@ -223,7 +239,7 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
 
         # 4. 长度已达到理想范围加分
         if current_length >= min_length:
-            split_score += min(4, (current_length - min_length) // 100)
+            split_score += min(4, (current_length - min_length) // length_score_factor)
         elif current_length < min_length * 0.7:  # 如果太短则减分
             split_score -= 5
 
@@ -245,7 +261,7 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
             print(f"段落 {i}: 得分={split_score:.1f}, 文本预览: '{para_info['text'][:50]}...'")
 
         # 记录潜在的分隔点
-        if split_score >= 7 and i > 0:  # 至少要7分以上才考虑作为分隔点
+        if split_score >= min_split_score and i > 0:  # 至少要设定分以上才考虑作为分隔点
             if debug_mode:
                 print(f"选择分割点: {i}, 得分: {split_score:.1f}")
 
@@ -254,7 +270,7 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
             last_potential_split = i
         elif current_length > max_length * 1.5:
             # 长度已经超过最大限制的1.5倍，需要找一个合适的分割点
-            best_boundary_index = find_nearest_sentence_boundary(paragraphs_info, i)
+            best_boundary_index = find_nearest_sentence_boundary(paragraphs_info, i, search_window)
 
             if best_boundary_index >= 0 and (not split_points or best_boundary_index > split_points[-1]):
                 if debug_mode:
@@ -288,7 +304,7 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
             final_split_points.append(split_point)
         else:
             # 寻找附近更合适的分割点
-            best_point = find_nearest_sentence_boundary(paragraphs_info, split_point)
+            best_point = find_nearest_sentence_boundary(paragraphs_info, split_point, search_window)
             if best_point >= 0 and best_point not in final_split_points:
                 if debug_mode:
                     print(f"修正分割点: {split_point} -> {best_point}")
@@ -394,15 +410,16 @@ def insert_split_markers(input_file, output_file, max_length=1000, min_length=30
         return False
 
 
-def process_all_documents(max_length=1000, min_length=300, sentence_integrity_weight=8.0, debug_mode=False):
-    """处理当前目录下所有Word文档（排除"双碳输出"文件夹）"""
+def process_all_documents(config):
+    """处理当前目录下所有Word文档"""
     # 获取脚本当前路径
     current_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
     if not current_dir:  # 如果为空，使用当前工作目录
         current_dir = os.getcwd()
 
     # 创建输出目录
-    output_base_dir = os.path.join(current_dir, "双碳输出")
+    output_folder = config["processing_options"]["output_folder"]
+    output_base_dir = os.path.join(current_dir, output_folder)
     os.makedirs(output_base_dir, exist_ok=True)
 
     total_files = 0
@@ -411,8 +428,8 @@ def process_all_documents(max_length=1000, min_length=300, sentence_integrity_we
 
     # 遍历当前目录及子目录
     for root, dirs, files in os.walk(current_dir):
-        # 跳过"双碳输出"文件夹
-        if "双碳输出" in root:
+        # 跳过输出文件夹
+        if output_folder in root:
             continue
 
         # 创建相对路径
@@ -439,11 +456,7 @@ def process_all_documents(max_length=1000, min_length=300, sentence_integrity_we
 
                 # 处理文档
                 try:
-                    if insert_split_markers(input_path, output_path,
-                                            max_length=max_length,
-                                            min_length=min_length,
-                                            sentence_integrity_weight=sentence_integrity_weight,
-                                            debug_mode=debug_mode):
+                    if insert_split_markers(input_path, output_path, config):
                         processed_files += 1
                     else:
                         failed_files.append(input_path)
@@ -456,11 +469,12 @@ def process_all_documents(max_length=1000, min_length=300, sentence_integrity_we
 
 def main():
     """主函数"""
-    print("开始处理Word文档...")
-    print("该脚本将根据智能算法在Word文档中插入<!--split-->分隔符")
-    print("优化版本: 增强句子完整性保护, 避免在句子中间分割")
+    print("Word文档智能分割工具 v2.0")
+    print("============================")
+    print("该工具会根据智能算法在Word文档中插入<!--split-->分隔符")
+    print("优化版本: 使用配置文件管理参数，增强句子完整性保护，避免在句子中间分割")
 
-    # 检查是否安装了所需库
+    # 检查必要的库
     required_libs = ['nltk', 'jieba']
     missing_libs = []
 
@@ -471,55 +485,59 @@ def main():
             missing_libs.append(lib)
 
     if missing_libs:
-        print(f"警告: 未安装以下库: {', '.join(missing_libs)}")
+        print(f"\n警告: 未安装以下库: {', '.join(missing_libs)}")
         print("为获得最佳分割效果，建议安装这些库:")
         for lib in missing_libs:
             print(f"  pip install {lib}")
         print()
 
-    # 参数设置
-    print("默认参数设置:")
-    print("  最大段落长度: 1000 字符")
-    print("  最小段落长度: 300 字符")
-    print("  句子完整性权重: 8.0 (值越大，越避免在非句子边界处分割)")
+    # 加载配置
+    config = load_config()
 
-    # 询问是否使用自定义参数
-    custom_params = input("是否使用自定义参数? (y/n, 默认n): ").lower().strip() == 'y'
+    # 显示主菜单
+    while True:
+        print("\n=== 主菜单 ===")
+        print("1. 开始处理文档")
+        print("2. 查看当前配置")
+        print("3. 编辑配置")
+        print("4. 退出")
 
-    max_length = 1000
-    min_length = 300
-    sentence_integrity_weight = 8.0
-    debug_mode = False
+        choice = input("\n请选择操作 [1-4]: ").strip()
 
-    if custom_params:
-        try:
-            max_length = int(input("最大段落长度 (默认1000): ") or "1000")
-            min_length = int(input("最小段落长度 (默认300): ") or "300")
-            sentence_integrity_weight = float(input("句子完整性权重 (默认8.0): ") or "8.0")
-            debug_mode = input("是否开启调试模式? (y/n, 默认n): ").lower().strip() == 'y'
-        except ValueError:
-            print("输入无效，使用默认参数")
-            max_length = 1000
-            min_length = 300
-            sentence_integrity_weight = 8.0
-            debug_mode = False
+        if choice == '1':
+            # 开始处理文档
+            print("\n开始处理文档...")
+            total_files, processed_files, failed_files = process_all_documents(config)
 
-    total_files, processed_files, failed_files = process_all_documents(
-        max_length=max_length,
-        min_length=min_length,
-        sentence_integrity_weight=sentence_integrity_weight,
-        debug_mode=debug_mode
-    )
+            print(
+                f"\n处理完成! 共找到 {total_files} 个Word文档，成功处理 {processed_files} 个，失败 {len(failed_files)} 个。")
+            print(f"处理后的文档已保存在当前目录下的'{config['processing_options']['output_folder']}'文件夹中。")
 
-    print(f"\n处理完成! 共找到 {total_files} 个Word文档，成功处理 {processed_files} 个，失败 {len(failed_files)} 个。")
-    print("处理后的文档已保存在当前目录下的'双碳输出'文件夹中。")
+            if failed_files:
+                print("\n以下文件处理失败:")
+                for file in failed_files:
+                    print(f" - {file}")
 
-    if failed_files:
-        print("\n以下文件处理失败:")
-        for file in failed_files:
-            print(f" - {file}")
+            input("\n按Enter键继续...")
 
-    input("按Enter键退出...")  # 添加这一行使窗口不会立即关闭
+        elif choice == '2':
+            # 查看当前配置
+            show_config()
+            input("\n按Enter键继续...")
+
+        elif choice == '3':
+            # 编辑配置
+            edit_config()
+            # 重新加载配置以确保使用最新的值
+            config = load_config()
+
+        elif choice == '4':
+            # 退出
+            print("\n谢谢使用！")
+            break
+
+        else:
+            print("\n无效选择，请重试")
 
 
 if __name__ == "__main__":
