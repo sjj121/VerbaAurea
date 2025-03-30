@@ -151,5 +151,6 @@ A: 对于特殊格式，可以通过调整高级设置中的评分参数来适�
 3. 完善文档和使用示例
 4. 分享您使用VerbaAurea的经验和案例
 
+<iframe style="width:100%;height:auto;min-width:600px;min-height:400px;" src="https://www.star-history.com/embed?secret=Z2hwX1dGcW1CdFY4eHRDeUhCV0ZqcDNXcjROMVdwVGVnQTE0cVljcQ==#AEPAX/VerbaAurea&Date" frameBorder="0"></iframe>
 
 本项目使用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可协议。
