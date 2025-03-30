@@ -77,7 +77,7 @@ pip install -r requirements.txt
 2. Run the main script
 
 ```bash
-python split_word.py
+python main.py
 ```
 
 

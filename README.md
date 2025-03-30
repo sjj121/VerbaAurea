@@ -82,7 +82,7 @@ pip install -r requirements.txt
 2. 运行主脚本
 
 ```bash
-python split_word.py
+python main.py
 ```
 
 1. 根据菜单选择操作:
