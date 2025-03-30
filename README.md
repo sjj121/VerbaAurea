@@ -29,7 +29,7 @@ your_project_folder/
 ├── split_word.py       # 主脚本
 ├── config_manager.py   # 配置管理模块
 ├── config.json   # 自动生成的配置文件
-└── 其他Word文档...
+└── 文档或文档所在文件夹...
 </pre>
 ```
 
