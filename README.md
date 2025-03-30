@@ -16,11 +16,13 @@ VerbaAurea 一个的文档预处理工具，致力于将原始文档转化为“
 
 ## 项目目录结构
 
+<pre>
 your_project_folder/
-├──  split_word.py       # 主脚本
+├── split_word.py       # 主脚本
 ├── ⚙️ config_manager.py   # 配置管理模块
-├──  split_config.json   # 自动生成的配置文件
-└──  其他Word文档...
+├── split_config.json   # 自动生成的配置文件
+└── 其他Word文档...
+</pre>
 
 
 **如何使用：**
