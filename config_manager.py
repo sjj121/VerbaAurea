@@ -10,7 +10,7 @@ DEFAULT_CONFIG = {
     },
     "processing_options": {
         "debug_mode": False,
-        "output_folder": "双碳输出",
+        "output_folder": "输出文件夹",
         "skip_existing": True
     },
     "advanced_settings": {
@@ -30,7 +30,7 @@ def get_config_path():
     if not current_dir:  # 如果为空，使用当前工作目录
         current_dir = os.getcwd()
 
-    return os.path.join(current_dir, "split_config.json")
+    return os.path.join(current_dir, "config.json")
 
 
 def load_config():
