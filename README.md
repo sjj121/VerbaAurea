@@ -24,13 +24,11 @@ VerbaAurea 是一个智能文档预处理工具，致力于将原始文档转化
   
 
 ```
-<pre>
 your_project_folder/
 ├── split_word.py       # 主脚本
 ├── config_manager.py   # 配置管理模块
 ├── config.json   # 自动生成的配置文件
 └── 文档或文档所在文件夹...
-</pre>
 ```
 
 
