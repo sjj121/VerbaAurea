@@ -1,5 +1,4 @@
 import os
-import re
 from docx import Document
 import sys
 from pathlib import Path
@@ -21,24 +20,27 @@ def is_sentence_boundary(text_before, text_after):
     if text_before.endswith(('。', '！', '？', '.', '!', '?', '；', ';')):
         return True
 
-    # 使用NLTK进行更精确的句子边界检测
+    # 使用jieba进行更精确的句子边界检测
     combined_text = text_before + " " + text_after
     try:
         # 区分中英文进行句子分割
         if any(u'\u4e00' <= char <= u'\u9fff' for char in combined_text):
             # 中文文本，使用jieba分句
-            sentences = []
-            for line in re.split(r'[。！？.!?]', combined_text):
-                if line.strip():
-                    sentences.append(line)
+            sentences = list(jieba.cut(combined_text))
+            # 检查分词结果中是否有明显的句子边界
+            for i, word in enumerate(sentences[:-1]):
+                if word in ['。', '！', '？', '.', '!', '?', '；', ';']:
+                    # 检查这个边界是否接近text_before和text_after的连接处
+                    before_seg = ''.join(sentences[:i+1])
+                    if (len(before_seg) - len(text_before)) < 5:
+                        return True
         else:
             # 英文文本，使用NLTK
             sentences = sent_tokenize(combined_text)
-
-        # 检查是否能在组合文本中找到明确的句子分界点
-        for sentence in sentences:
-            if text_before.endswith(sentence) or text_after.startswith(sentence):
-                return True
+            # 检查是否能在组合文本中找到明确的句子分界点
+            for sentence in sentences:
+                if text_before.endswith(sentence) or text_after.startswith(sentence):
+                    return True
     except:
         pass
 
@@ -165,11 +167,17 @@ def insert_split_markers(input_file, output_file, config):
     try:
         # 判断文本主要是中文还是英文
         if any(u'\u4e00' <= char <= u'\u9fff' for char in total_text):
-            # 中文文本使用jieba分句
+            # 中文文本使用jieba分词和分句
+            words = list(jieba.cut(total_text))
             sentences = []
-            for line in re.split(r'[。！？.!?]', total_text):
-                if line.strip():
-                    sentences.append(line)
+            temp = ""
+            for word in words:
+                temp += word
+                if word in ['。', '！', '？', '.', '!', '?']:
+                    sentences.append(temp)
+                    temp = ""
+            if temp:  # 添加最后一个可能不完整的句子
+                sentences.append(temp)
         else:
             # 英文文本使用NLTK
             sentences = sent_tokenize(total_text)
