@@ -6,7 +6,7 @@
   },
   "processing_options": {
     "debug_mode": false,
-    "output_folder": "双碳输出",
+    "output_folder": "文件输出",
     "skip_existing": true
   },
   "advanced_settings": {
