@@ -20,8 +20,8 @@ VerbaAurea is an intelligent document preprocessing tool dedicated to transformi
 - **Document Indexing** - Optimizes index units for document retrieval systems
 - **Content Management** - Improves document organization in content management systems
 
+## Project Structure:
 ```
-Project Structure:
 ├── main.py                 # Main program entry point
 ├── config_manager.py       # Configuration management
 ├── document_processor.py   # Document processing core
