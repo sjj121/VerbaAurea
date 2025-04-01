@@ -238,27 +238,84 @@ def refine_split_points(paragraphs_info, split_points, search_window, debug_mode
     return sorted(list(set(final_split_points)))
 
 
+
+def copy_single_table(table, new_doc, debug_mode):
+    """复制单个表格"""
+    try:
+        rows = len(table.rows)
+        cols = len(table.rows[0].cells) if rows > 0 else 0
+
+        if rows > 0 and cols > 0:
+            new_table = new_doc.add_table(rows=rows, cols=cols)
+
+            try:
+                new_table.style = table.style
+            except:
+                pass
+
+            for i, row in enumerate(table.rows):
+                for j, cell in enumerate(row.cells):
+                    if i < len(new_table.rows) and j < len(new_table.rows[i].cells):
+                        try:
+                            new_cell = new_table.rows[i].cells[j]
+                            if cell.text:
+                                new_cell.text = cell.text
+                        except:
+                            pass
+    except Exception as e:
+        if debug_mode:
+            print(f"  警告: 处理表格时出错: {str(e)}")
+
+
 def create_output_document(doc, new_doc, split_points, output_file, debug_mode):
     """根据原文档和分割点创建新的输出文档"""
     split_marker_count = 0
+    paragraph_index = 0
+    paragraph_map = {}  # 用于映射段落对象到其索引
 
-    # 先处理段落
-    for i, paragraph in enumerate(doc.paragraphs):
-        # 检查是否是分隔点
-        if i in split_points:
-            # 添加分隔符
-            new_doc.add_paragraph("<!--split-->")
-            split_marker_count += 1
+    # 创建段落映射，以便后续查找段落索引
+    for i, para in enumerate(doc.paragraphs):
+        paragraph_map[para] = i
 
-        # 添加当前段落并复制格式
-        copy_paragraph(paragraph, new_doc, debug_mode)
+    # 获取文档主体部分
+    body_element = doc._body._body  # 访问内部XML结构
 
-    # 处理表格
-    try:
-        copy_tables(doc, new_doc, debug_mode)
-    except Exception as e:
-        if debug_mode:
-            print(f"警告: 处理文档中的表格时出错: {str(e)}")
+    # 按文档中的顺序处理所有元素
+    for child in body_element.iterchildren():
+        if child.tag.endswith('p'):  # 段落元素
+            # 查找对应的段落对象
+            para_index = -1
+            para_obj = None
+            for para in doc.paragraphs:
+                if para._p is child:  # 找到对应段落
+                    para_obj = para
+                    para_index = paragraph_map.get(para, -1)
+                    break
+
+            # 如果是分隔点，添加分隔符
+            if para_index in split_points:
+                new_doc.add_paragraph("<!--split-->")
+                split_marker_count += 1
+
+            # 复制段落
+            if para_obj is not None:
+                copy_paragraph(para_obj, new_doc, debug_mode)
+
+        elif child.tag.endswith('tbl'):  # 表格元素
+            # 查找对应的表格对象
+            table_obj = None
+            for table in doc.tables:
+                if table._tbl is child:  # 找到对应表格
+                    table_obj = table
+                    break
+
+            # 复制表格
+            if table_obj is not None:
+                try:
+                    copy_single_table(table_obj, new_doc, debug_mode)
+                except Exception as e:
+                    if debug_mode:
+                        print(f"  警告: 处理表格时出错: {str(e)}")
 
     # 保存文档
     output_dir = os.path.dirname(output_file)
@@ -273,7 +330,6 @@ def create_output_document(doc, new_doc, split_points, output_file, debug_mode):
     except Exception as e:
         print(f"保存文档 {output_file} 时出错: {str(e)}")
         return False
-
 
 def copy_paragraph(src_para, new_doc, debug_mode):
     """复制段落内容和格式"""
@@ -309,31 +365,3 @@ def copy_paragraph(src_para, new_doc, debug_mode):
         if debug_mode:
             print(f"  警告: 复制格式时出错: {str(e)}")
 
-
-def copy_tables(doc, new_doc, debug_mode):
-    """复制文档中的表格"""
-    for table in doc.tables:
-        try:
-            rows = len(table.rows)
-            cols = len(table.rows[0].cells) if rows > 0 else 0
-
-            if rows > 0 and cols > 0:
-                new_table = new_doc.add_table(rows=rows, cols=cols)
-
-                try:
-                    new_table.style = table.style
-                except:
-                    pass
-
-                for i, row in enumerate(table.rows):
-                    for j, cell in enumerate(row.cells):
-                        if i < len(new_table.rows) and j < len(new_table.rows[i].cells):
-                            try:
-                                new_cell = new_table.rows[i].cells[j]
-                                if cell.text:
-                                    new_cell.text = cell.text
-                            except:
-                                pass
-        except Exception as e:
-            if debug_mode:
-                print(f"  警告: 处理表格时出错: {str(e)}")
