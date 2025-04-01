@@ -167,6 +167,6 @@ A: 对于特殊格式，可以通过调整高级设置中的评分参数来适�
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Timeline)](https://www.star-history.com/#AEPAX/VerbaAurea&Timeline)
+[![Star History Chart](https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date)](https://www.star-history.com/#AEPAX/VerbaAurea&Date)
 
 本项目使用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可协议。
