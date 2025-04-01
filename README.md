@@ -167,12 +167,8 @@ A: 对于特殊格式，可以通过调整高级设置中的评分参数来适�
 
 ## Star History
 
-<a href="https://www.star-history.com/#AEPAX/VerbaAurea&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date" />
- </picture>
-</a>
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AEPAX/VerbaAurea&type=Date)](https://www.star-history.com/#AEPAX/VerbaAurea&Date)
 
 本项目使用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可协议。
