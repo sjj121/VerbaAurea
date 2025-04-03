@@ -14,6 +14,7 @@ from utils import get_script_dir
 
 
 def collect_files_to_process(config):
+
     """收集需要处理的文件列表"""
     # 获取脚本当前路径
     current_dir = get_script_dir()
