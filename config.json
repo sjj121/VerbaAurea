@@ -20,6 +20,7 @@
     "parallel_processing": true,
     "num_workers": 0,
     "cache_size": 1024,
-    "batch_size": 50
-  }
+    "batch_size": 3
+  },
+  "input_folder": "."
 }
