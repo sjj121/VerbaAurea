@@ -284,7 +284,11 @@ class ExcelParser:
         return result
 
     @staticmethod
-    def parse_csv(file_data: bytes) -> List[str]:
+    def parse_csv(file_data: bytes, verbose=True, output_format='markdown') -> List[str]:
+        """
+        将csv表格解析转换成markdown格式
+        支持转换为html的表格格式输出 更好适应多级表头
+        """
         if not isinstance(file_data, bytes):
             raise ValueError("file_data must be bytes")
         file_bio = BytesIO(file_data)
@@ -294,9 +298,11 @@ class ExcelParser:
         if df.map(lambda x: x.strip() if isinstance(x, str) else '').eq('').all().all():
             raise ValueError("Empty dataframe")
 
-        md_table = df.to_markdown()
+        if output_format == 'markdown':
+            table = df.to_markdown()
+            # 添加表格元数据
+            table = f"# Table: \n{table}"
+        else:
+            table = df.to_html()
 
-        # 添加表格元数据
-        md_table = f"# Table: \n{md_table}"
-
-        return [md_table]
+        return [table]
