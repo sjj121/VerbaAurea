@@ -85,7 +85,6 @@ class ExcelParser:
     def parse_openpyxl(file_data: bytes, verbose=True, output_format='markdown') -> List[str]:
         """
         将表格解析转换成markdown格式,只支持xlsx格式
-        支持转换为html的表格格式输出 更好适应多级表头
         """
         if not isinstance(file_data, bytes):
             raise ValueError("file_data must be bytes")
