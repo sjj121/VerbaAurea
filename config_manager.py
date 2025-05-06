@@ -6,7 +6,8 @@ DEFAULT_CONFIG = {
     "document_settings": {
         "max_length": 1000,
         "min_length": 300,
-        "sentence_integrity_weight": 8.0
+        "sentence_integrity_weight": 8.0,
+        "table_length_factor": 1.2
     },
     "processing_options": {
         "debug_mode": False,
