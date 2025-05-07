@@ -15,7 +15,9 @@
     "heading_score_bonus": 10,
     "sentence_end_score_bonus": 6,
     "length_score_factor": 100,
-    "search_window": 5
+    "search_window": 5,
+    "heading_after_penalty": 12,
+    "force_split_before_heading": true
   },
   "performance_settings": {
     "parallel_processing": true,

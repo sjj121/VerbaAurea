@@ -75,13 +75,15 @@ def insert_split_markers(input_file, output_file, config):
         sentence_integrity_weight, search_window,
         min_split_score, heading_score_bonus,
         sentence_end_score_bonus, length_score_factor,
-        debug_mode
+        debug_mode, adv_settings
     )
 
     # 后处理：检查所有分割点确保不会打断句子
     final_split_points = refine_split_points(
         elements_info, split_points, search_window, debug_mode
     )
+
+    final_split_points = merge_heading_with_body(elements_info, final_split_points)
 
     if debug_mode:
         print(f"最终分割点: {final_split_points}")
@@ -103,12 +105,24 @@ def find_split_points(elements_info, max_length, min_length,
                       sentence_integrity_weight, search_window,
                       min_split_score, heading_score_bonus,
                       sentence_end_score_bonus, length_score_factor,
-                      debug_mode):
+                      debug_mode, adv_settings):
+    force_heading = adv_settings.get("force_split_before_heading", True)
     split_points = []
     current_length = 0
     last_potential = -1
 
     for idx, elem in enumerate(elements_info):
+        if force_heading and elem['is_heading'] and idx > 0:
+            # 只有当上一分段点不是自己才加入
+            if not split_points or idx != split_points[-1]:
+                split_points.append(idx)
+            current_length = 0
+            last_potential = idx
+            if debug_mode:
+                preview = (elem['text'][:30] + '...') if elem['text'] else '[table]'
+                print(f"  #{idx:03d} (heading) 强制分段 «{preview}»")
+            continue
+
         if elem['length'] == 0:
             continue
 
@@ -117,7 +131,8 @@ def find_split_points(elements_info, max_length, min_length,
             idx, elem, elements_info, current_length,
             min_length, max_length, sentence_integrity_weight,
             heading_score_bonus, sentence_end_score_bonus,
-            length_score_factor, split_points
+            length_score_factor, split_points,
+            adv_settings
         )
 
         if debug_mode:
@@ -145,7 +160,7 @@ def find_split_points(elements_info, max_length, min_length,
 def calculate_split_score(idx, elem, elements_info, current_length,
                           min_length, max_length, sentence_integrity_weight,
                           heading_score_bonus, sentence_end_score_bonus,
-                          length_score_factor, split_points):
+                          length_score_factor, split_points, adv_settings):
     score = 0
     if elem['type'] == 'para':
         if elem['is_heading']:
@@ -158,6 +173,14 @@ def calculate_split_score(idx, elem, elements_info, current_length,
             score += sentence_integrity_weight
         else:
             score -= 10
+        # ---- 标题之后(允许夹空段)的第一段，强行减分 ----
+        prev = idx - 1
+        while prev >= 0 and elements_info[prev]['type'] == 'para' \
+                and elements_info[prev]['length'] == 0:  # 跳过空段
+            prev -= 1
+        if prev >= 0 and elements_info[prev]['is_heading']:
+            heading_after_penalty = adv_settings.get("heading_after_penalty", 12)
+            score -= heading_after_penalty  # 让评分掉到阈值以下
     else:
         # 表格：天然边界，可在其前后分段
         score += 6
@@ -188,6 +211,25 @@ def refine_split_points(elements_info, split_points, search_window, debug_mode):
         else:
             refined.append(sp)
     return sorted(set(refined))
+
+def merge_heading_with_body(elements_info, split_points):
+    adjusted = []
+    for sp in split_points:
+        new_sp = sp
+        # 向前扫，跳过空段落
+        while new_sp > 0 and elements_info[new_sp-1]['type'] == 'para' \
+              and elements_info[new_sp-1]['length'] == 0:
+            new_sp -= 1
+        # （2）如果刚跳到的就是标题 —— OK，保持 new_sp
+        if elements_info[new_sp]['is_heading']:
+            pass
+        # （3）如果它的前一个元素是标题，则把分割点移到标题
+        elif new_sp > 0 and elements_info[new_sp - 1]['is_heading']:
+            new_sp -= 1
+        if new_sp not in adjusted:
+            adjusted.append(new_sp)
+    return sorted(adjusted)
+
 
 
 

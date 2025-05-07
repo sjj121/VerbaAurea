@@ -2,6 +2,8 @@ import os
 import json
 import sys
 
+from traits.trait_types import true
+
 DEFAULT_CONFIG = {
     "document_settings": {
         "max_length": 1000,
@@ -19,7 +21,9 @@ DEFAULT_CONFIG = {
         "heading_score_bonus": 10,
         "sentence_end_score_bonus": 6,
         "length_score_factor": 100,
-        "search_window": 5
+        "search_window": 5,
+        "heading_after_penalty": 12,
+        "force_split_before_heading": true
     }
 }
 
@@ -88,6 +92,7 @@ def show_config():
     print(f"  最大段落长度: {doc_settings['max_length']} 字符")
     print(f"  最小段落长度: {doc_settings['min_length']} 字符")
     print(f"  句子完整性权重: {doc_settings['sentence_integrity_weight']}")
+    print(f"  表格文字权重: {doc_settings['table_length_factor']}")
 
     # 处理选项
     proc_options = config["processing_options"]
@@ -104,6 +109,7 @@ def show_config():
     print(f"  句子结束加分: {adv_settings['sentence_end_score_bonus']}")
     print(f"  长度评分因子: {adv_settings['length_score_factor']}")
     print(f"  搜索窗口大小: {adv_settings['search_window']}")
+    print(f"  标题后惩罚: {adv_settings['heading_after_penalty']}")
 
     return config
 
