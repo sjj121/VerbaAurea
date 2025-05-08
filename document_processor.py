@@ -7,12 +7,14 @@
 """
 
 from docx import Document
+from text_analysis import extract_elements_info
 import os
 from text_analysis import (
     is_sentence_boundary,
-    find_nearest_sentence_boundary,
-    analyze_document
+    find_nearest_sentence_boundary
 )
+from docx.oxml.text.paragraph import CT_P
+from docx.oxml.table import CT_Tbl
 
 
 def insert_split_markers(input_file, output_file, config):
@@ -59,33 +61,29 @@ def insert_split_markers(input_file, output_file, config):
     # 创建新文档
     new_doc = Document()
 
-    # 文档分析阶段
-    paragraphs_info, semantic_blocks = analyze_document(doc, debug_mode)
+    # 统一提取段落 + 表格
+    table_factor = config.get("document_settings", {}).get("table_length_factor", 1.0)
+    elements_info = extract_elements_info(doc, table_factor, debug_mode)
 
     if debug_mode:
-        print(f"文档共有 {len(paragraphs_info)} 个段落，组合成 {len(semantic_blocks)} 个语义块")
+        print(f"文档共有 {len(elements_info)} 个元素（段落 + 表格）")
 
     # 确定分隔点
     split_points = find_split_points(
-        paragraphs_info,
-        max_length,
-        min_length,
-        sentence_integrity_weight,
-        search_window,
-        min_split_score,
-        heading_score_bonus,
-        sentence_end_score_bonus,
-        length_score_factor,
-        debug_mode
+        elements_info,
+        max_length, min_length,
+        sentence_integrity_weight, search_window,
+        min_split_score, heading_score_bonus,
+        sentence_end_score_bonus, length_score_factor,
+        debug_mode, adv_settings
     )
 
     # 后处理：检查所有分割点确保不会打断句子
     final_split_points = refine_split_points(
-        paragraphs_info,
-        split_points,
-        search_window,
-        debug_mode
+        elements_info, split_points, search_window, debug_mode
     )
+
+    final_split_points = merge_heading_with_body(elements_info, final_split_points)
 
     if debug_mode:
         print(f"最终分割点: {final_split_points}")
@@ -102,145 +100,143 @@ def insert_split_markers(input_file, output_file, config):
     return result
 
 
-def find_split_points(paragraphs_info, max_length, min_length,
+# ---------- 重新实现分割三大函数 ----------
+def find_split_points(elements_info, max_length, min_length,
                       sentence_integrity_weight, search_window,
                       min_split_score, heading_score_bonus,
                       sentence_end_score_bonus, length_score_factor,
-                      debug_mode):
-    """确定文档的分隔点"""
+                      debug_mode, adv_settings):
+    force_heading = adv_settings.get("force_split_before_heading", True)
     split_points = []
     current_length = 0
-    last_potential_split = -1
+    last_potential = -1
 
-    for i, para_info in enumerate(paragraphs_info):
-        if para_info['length'] == 0:  # 跳过空段落
+    for idx, elem in enumerate(elements_info):
+        if force_heading and elem['is_heading'] and idx > 0:
+            # 只有当上一分段点不是自己才加入
+            if not split_points or idx != split_points[-1]:
+                split_points.append(idx)
+            current_length = 0
+            last_potential = idx
+            if debug_mode:
+                preview = (elem['text'][:30] + '...') if elem['text'] else '[table]'
+                print(f"  #{idx:03d} (heading) 强制分段 «{preview}»")
             continue
 
-        current_length += para_info['length']
+        if elem['length'] == 0:
+            continue
 
-        # 潜在的分隔点评分系统 (0-10分，越高越适合作为分隔点)
-        split_score = calculate_split_score(
-            i, para_info, paragraphs_info,
-            current_length, min_length, max_length,
-            sentence_integrity_weight, heading_score_bonus,
-            sentence_end_score_bonus, length_score_factor,
-            split_points
+        current_length += elem['length']
+        score = calculate_split_score(
+            idx, elem, elements_info, current_length,
+            min_length, max_length, sentence_integrity_weight,
+            heading_score_bonus, sentence_end_score_bonus,
+            length_score_factor, split_points,
+            adv_settings
         )
 
-        if debug_mode and split_score >= 0:
-            print(f"段落 {i}: 得分={split_score:.1f}, 文本预览: '{para_info['text'][:50]}...'")
+        if debug_mode:
+            preview = (elem['text'][:30] + '...') if elem['text'] else '[table]'
+            print(f"  #{idx:03d} ({elem['type']}) len={elem['length']} score={score:.1f} {preview}")
 
-        # 记录潜在的分隔点
-        if split_score >= min_split_score and i > 0:  # 至少要设定分以上才考虑作为分隔点
-            if debug_mode:
-                print(f"选择分割点: {i}, 得分: {split_score:.1f}")
-
-            split_points.append(i)
-            current_length = para_info['length']  # 重置长度计数
-            last_potential_split = i
+        if score >= min_split_score and idx > 0:
+            split_points.append(idx)
+            current_length = 0
+            last_potential = idx
         elif current_length > max_length * 1.5:
-            # 长度已经超过最大限制的1.5倍，需要找一个合适的分割点
-            best_boundary_index = find_nearest_sentence_boundary(paragraphs_info, i, search_window)
-
-            if best_boundary_index >= 0 and (not split_points or best_boundary_index > split_points[-1]):
-                if debug_mode:
-                    print(f"超长分段，选择最近的句子边界: {best_boundary_index}")
-
-                split_points.append(best_boundary_index)
-                # 重新计算当前长度
-                if best_boundary_index < i:
-                    current_length = sum(p['length'] for p in paragraphs_info[best_boundary_index:i + 1])
-                else:
-                    current_length = para_info['length']
-                last_potential_split = best_boundary_index
-            elif i - last_potential_split > 3:
-                # 实在找不到合适的句子边界，只能在当前位置分割
-                if debug_mode:
-                    print(f"警告：在段落 {i} 处强制分割，未找到合适的句子边界")
-
-                split_points.append(i)
-                current_length = para_info['length']
-                last_potential_split = i
+            best = find_nearest_sentence_boundary(elements_info, idx, search_window)
+            if best >= 0 and (not split_points or best > split_points[-1]):
+                split_points.append(best)
+                current_length = 0
+                last_potential = best
+            elif idx - last_potential > 3:
+                split_points.append(idx)
+                current_length = 0
+                last_potential = idx
 
     return split_points
 
 
-def calculate_split_score(i, para_info, paragraphs_info, current_length,
+def calculate_split_score(idx, elem, elements_info, current_length,
                           min_length, max_length, sentence_integrity_weight,
                           heading_score_bonus, sentence_end_score_bonus,
-                          length_score_factor, split_points):
-    """计算段落作为分割点的得分"""
-    split_score = 0
-
-    # 1. 标题是最佳分隔点
-    if para_info['is_heading']:
-        split_score += heading_score_bonus
-
-    # 2. 句子完整性检查
-    if para_info['ends_with_period']:
-        split_score += sentence_end_score_bonus
-
-    # 3. 确保分割点在句子边界
-    if i > 0 and is_sentence_boundary(paragraphs_info[i - 1]['text'], para_info['text']):
-        split_score += 8 * sentence_integrity_weight / 8.0  # 使用传入的权重调整
-    else:
-        split_score -= 10  # 严重惩罚非句子边界的分割
-
-    # 4. 长度已达到理想范围加分
-    if current_length >= min_length:
-        split_score += min(4, (current_length - min_length) // length_score_factor)
-    elif current_length < min_length * 0.7:  # 如果太短则减分
-        split_score -= 5
-
-    # 5. 列表项开始或结束是好的分隔点
-    if i > 0 and ((para_info['is_list_item'] and not paragraphs_info[i - 1]['is_list_item']) or
-                  (not para_info['is_list_item'] and paragraphs_info[i - 1]['is_list_item'] and
-                   paragraphs_info[i - 1]['ends_with_period'])):
-        split_score += 3
-
-    # 6. 避免相邻分隔点
-    if split_points and i - split_points[-1] < 3:
-        split_score -= 8
-
-    # 7. 如果长度超过最大值，增加分割倾向
-    if current_length > max_length:
-        split_score += 4
-
-    return split_score
-
-
-def refine_split_points(paragraphs_info, split_points, search_window, debug_mode):
-    """修正分割点，确保分割点在句子边界上"""
-    final_split_points = []
-
-    for split_point in split_points:
-        # 获取分割点前后的文本
-        before_text = paragraphs_info[split_point - 1]['text'] if split_point > 0 else ""
-        after_text = paragraphs_info[split_point]['text']
-
-        # 检查是否为句子边界
-        if is_sentence_boundary(before_text, after_text):
-            final_split_points.append(split_point)
+                          length_score_factor, split_points, adv_settings):
+    score = 0
+    if elem['type'] == 'para':
+        if elem['is_heading']:
+            score += heading_score_bonus
+        if elem['ends_with_period']:
+            score += sentence_end_score_bonus
+        # 句子边界检查（仅段落间）
+        if idx > 0 and elements_info[idx-1]['type'] == 'para' and \
+           is_sentence_boundary(elements_info[idx-1]['text'], elem['text']):
+            score += sentence_integrity_weight
         else:
-            # 寻找附近更合适的分割点
-            best_point = find_nearest_sentence_boundary(paragraphs_info, split_point, search_window)
-            if best_point >= 0 and best_point not in final_split_points:
-                if debug_mode:
-                    print(f"修正分割点: {split_point} -> {best_point}")
-                final_split_points.append(best_point)
-            else:
-                # 无法找到更好的点，保留原分割点但记录警告
-                if debug_mode:
-                    print(f"警告: 无法找到比 {split_point} 更好的句子边界")
-                final_split_points.append(split_point)
+            score -= 10
+        # ---- 标题之后(允许夹空段)的第一段，强行减分 ----
+        prev = idx - 1
+        while prev >= 0 and elements_info[prev]['type'] == 'para' \
+                and elements_info[prev]['length'] == 0:  # 跳过空段
+            prev -= 1
+        if prev >= 0 and elements_info[prev]['is_heading']:
+            heading_after_penalty = adv_settings.get("heading_after_penalty", 12)
+            score -= heading_after_penalty  # 让评分掉到阈值以下
+    else:
+        # 表格：天然边界，可在其前后分段
+        score += 6
 
-    # 确保分割点有序
-    return sorted(list(set(final_split_points)))
+    # 长度因子
+    if current_length >= min_length:
+        score += min(4, (current_length - min_length)//length_score_factor)
+    elif current_length < min_length*0.7:
+        score -= 5
+
+    # 避免过近
+    if split_points and idx - split_points[-1] < 3:
+        score -= 8
+    if current_length > max_length:
+        score += 4
+    return score
+
+
+def refine_split_points(elements_info, split_points, search_window, debug_mode):
+    refined = []
+    for sp in split_points:
+        before = elements_info[sp-1]['text'] if sp>0 else ''
+        after  = elements_info[sp]['text']
+        if elements_info[sp-1]['type']=='para' and elements_info[sp]['type']=='para' and \
+           not is_sentence_boundary(before, after):
+            best = find_nearest_sentence_boundary(elements_info, sp, search_window)
+            refined.append(best if best>=0 else sp)
+        else:
+            refined.append(sp)
+    return sorted(set(refined))
+
+def merge_heading_with_body(elements_info, split_points):
+    adjusted = []
+    for sp in split_points:
+        new_sp = sp
+        # 向前扫，跳过空段落
+        while new_sp > 0 and elements_info[new_sp-1]['type'] == 'para' \
+              and elements_info[new_sp-1]['length'] == 0:
+            new_sp -= 1
+        # （2）如果刚跳到的就是标题 —— OK，保持 new_sp
+        if elements_info[new_sp]['is_heading']:
+            pass
+        # （3）如果它的前一个元素是标题，则把分割点移到标题
+        elif new_sp > 0 and elements_info[new_sp - 1]['is_heading']:
+            new_sp -= 1
+        if new_sp not in adjusted:
+            adjusted.append(new_sp)
+    return sorted(adjusted)
+
 
 
 
 def copy_single_table(table, new_doc, debug_mode):
     """复制单个表格"""
+    if table is None:  # ← 兜底
+        return
     try:
         rows = len(table.rows)
         cols = len(table.rows[0].cells) if rows > 0 else 0
@@ -268,59 +264,36 @@ def copy_single_table(table, new_doc, debug_mode):
 
 
 def create_output_document(doc, new_doc, split_points, output_file, debug_mode):
-    """根据原文档和分割点创建新的输出文档"""
-    split_marker_count = 0
-    paragraph_index = 0
-    paragraph_map = {}
-    table_map = {}
+    split_marker_cnt = 0
+    para_iter = iter(doc.paragraphs)
+    tbl_iter  = iter(doc.tables)
+    next_para = next(para_iter, None)
+    next_tbl  = next(tbl_iter, None)
+    idx = -1
 
-    # 创建映射
-    for i, para in enumerate(doc.paragraphs):
-        paragraph_map[para._element] = (para, i)
+    # 将 Word DOM 再次顺序遍历
+    for el in doc._element.body:
+        idx += 1
+        if idx in split_points:
+            new_doc.add_paragraph("<!--split-->")
+            split_marker_cnt += 1
 
-    for i, table in enumerate(doc.tables):
-        table_map[table._element] = table
+        if isinstance(el, CT_P):
+            # —— 段落 ——
+            copy_paragraph(next_para, new_doc, debug_mode)
+            next_para = next(para_iter, None)
+        elif isinstance(el, CT_Tbl):
+            # —— 表格 ——
+            copy_single_table(next_tbl, new_doc, debug_mode)
+            next_tbl = next(tbl_iter, None)
 
-    # 获取所有段落和表格元素，按它们在文档中的顺序
-    # 未来可以扩展为: './/w:p | .//w:tbl | .//w:drawing' 来包含图片
-    all_elements = doc._element.xpath('.//w:p | .//w:tbl')
+    # 保存
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    new_doc.save(output_file)
+    if debug_mode:
+        print(f"✓ 保存: {output_file} (split={split_marker_cnt})")
+    return True
 
-    # 处理每个元素
-    for element in all_elements:
-        if element.tag.endswith('p'):  # 段落
-            if element in paragraph_map:
-                para, para_index = paragraph_map[element]
-
-                # 如果是分隔点，添加分隔符
-                if para_index in split_points:
-                    new_doc.add_paragraph("<!--split-->")
-                    split_marker_count += 1
-
-                # 复制段落
-                copy_paragraph(para, new_doc, debug_mode)
-
-        elif element.tag.endswith('tbl'):  # 表格
-            if element in table_map:
-                table = table_map[element]
-                try:
-                    copy_single_table(table, new_doc, debug_mode)
-                except Exception as e:
-                    if debug_mode:
-                        print(f"  警告: 处理表格时出错: {str(e)}")
-
-    # 保存文档
-    output_dir = os.path.dirname(output_file)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-
-    try:
-        new_doc.save(output_file)
-        if debug_mode:
-            print(f"已保存: {output_file}，插入了 {split_marker_count} 个分隔符")
-        return True
-    except Exception as e:
-        print(f"保存文档 {output_file} 时出错: {str(e)}")
-        return False
 
 
 def copy_paragraph(src_para, new_doc, debug_mode):

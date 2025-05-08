@@ -10,7 +10,8 @@ import jieba
 import nltk
 from nltk.tokenize import sent_tokenize
 import functools
-
+from docx.oxml.text.paragraph import CT_P
+from docx.oxml.table import CT_Tbl
 # 初始化 NLTK 和 Jieba
 try:
     nltk.data.find('tokenizers/punkt')
@@ -184,3 +185,77 @@ def identify_semantic_blocks(paragraphs_info):
         semantic_blocks.append(temp_block)
 
     return semantic_blocks
+
+
+
+def extract_elements_info(doc, table_length_factor=1.0, debug_mode=False):
+    """
+    按文档布局顺序返回 elements_info 列表，每一项：
+       {
+         'type'        : 'para' | 'table',
+         'i_para'      : 段落索引 (仅 para 有),
+         'i_table'     : 表格索引 (仅 table 有),
+         'length'      : 文本字符数 * table_length_factor,
+         'text'        : 纯文本(表格=单元格文本拼接),
+         'is_heading'  : ...
+         'is_list_item': ...
+         'ends_with_period': ...
+       }
+    """
+    elements = []
+    para_idx = -1
+    tbl_idx  = -1
+
+    paragraph_map = {p._element: p for p in doc.paragraphs}
+    table_map     = {t._element: t for t in doc.tables}
+
+    for el in doc._element.body:
+        # ---------- 段落 ----------
+        if isinstance(el, CT_P):
+            para_idx += 1
+            p = paragraph_map[el]
+            text = p.text.strip()
+            is_heading = p.style.name.startswith(('Heading', '标题'))
+            is_list_item = text.startswith(('•', '-', '*', '1.', '2.', '3.')) or (
+                           len(text) > 2 and text[0].isdigit() and text[1] == '.')
+            ends_with_period = text.endswith(('。', '！', '？', '.', '!', '?', '；', ';'))
+
+            elements.append({
+                'type': 'para',
+                'i_para': para_idx,
+                'i_table': None,
+                'text': text,
+                'length': len(text),
+                'is_heading': is_heading,
+                'is_list_item': is_list_item,
+                'ends_with_period': ends_with_period
+            })
+
+        # ---------- 表格 ----------
+        elif isinstance(el, CT_Tbl):
+            tbl_idx += 1
+            tbl = table_map[el]
+            # 统计表格文本
+            texts = []
+            for row in tbl.rows:
+                for cell in row.cells:
+                    if cell.text:
+                        texts.append(cell.text.strip())
+            tbl_text = ' '.join(texts)
+            tbl_len  = int(len(tbl_text) * table_length_factor)
+
+            elements.append({
+                'type': 'table',
+                'i_para': None,
+                'i_table': tbl_idx,
+                'text': tbl_text,
+                'length': tbl_len,
+                'is_heading': False,
+                'is_list_item': False,
+                'ends_with_period': True      # 视为天然边界
+            })
+
+    if debug_mode:
+        print(f"[extract] 生成 elements_info 共 {len(elements)} 条，其中表格 {tbl_idx+1} 个")
+
+    return elements
